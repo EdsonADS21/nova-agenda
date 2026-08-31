@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agenda Virtual - Login</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #0d1117; color: #c9d1d9; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        
+        .auth-container { background: #161b22; border: 1px solid #30363d; border-radius: 8px; width: 360px; padding: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .auth-header { text-align: center; margin-bottom: 20px; }
+        .auth-header h2 { color: #f0f6fc; font-size: 20px; margin-bottom: 5px; }
+        .auth-header p { font-size: 13px; color: #8b949e; }
+        
+        .tabs { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 20px; }
+        .tab { flex: 1; text-align: center; padding: 8px; cursor: pointer; font-size: 14px; color: #8b949e; font-weight: 500; border-bottom: 2px solid transparent; }
+        .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+        
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-size: 12px; margin-bottom: 5px; color: #8b949e; }
+        .form-group input { width: 100%; padding: 10px; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 4px; font-size: 14px; outline: none; }
+        .form-group input:focus { border-color: #58a6ff; }
+        
+        .btn { width: 100%; padding: 10px; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 14px; }
+        .btn-primary { background: #238636; color: #fff; }
+        .btn-primary:hover { background: #2ea043; }
+        .btn-info { background: #1f6feb; color: #fff; }
+        .btn-info:hover { background: #388bfd; }
+
+        .alert { padding: 10px; border-radius: 4px; font-size: 13px; margin-bottom: 15px; }
+        .alert-danger { background: rgba(248,81,73,0.15); border: 1px solid #f85149; color: #ff7b72; }
+        .alert-success { background: rgba(46,160,67,0.15); border: 1px solid #3fb950; color: #56d364; }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="auth-container">
+        <div class="auth-header">
+            <h2>Agenda Virtual</h2>
+            <p>Acesse sua conta para continuar</p>
+        </div>
+
+        {% if erro %}
+            <div class="alert alert-danger">{{ erro }}</div>
+        {% endif %}
+
+        {% if sucesso %}
+            <div class="alert alert-success">{{ sucesso }}</div>
+        {% endif %}
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('login')">Entrar</div>
+            <div class="tab" onclick="switchTab('cadastro')">Cadastrar</div>
+        </div>
+
+        <!-- FORMULÁRIO DE LOGIN -->
+        <form id="loginForm" method="POST" action="/login">
+            <input type="hidden" name="acao" value="entrar">
+            
+            <div class="form-group">
+                <label>Usuário</label>
+                <input type="text" name="username" required autocomplete="username">
+            </div>
+
+            <div class="form-group">
+                <label>Senha</label>
+                <input type="password" name="password" required autocomplete="current-password">
+            </div>
+
+            <button type="submit" class="btn btn-primary">Entrar no Sistema</button>
+        </form>
+
+        <!-- FORMULÁRIO DE CADASTRO -->
+        <form id="registerForm" method="POST" action="/login" class="hidden">
+            <input type="hidden" name="acao" value="cadastrar">
+
+            <div class="form-group">
+                <label>Novo Usuário</label>
+                <input type="text" name="new_username" required autocomplete="username">
+            </div>
+
+            <div class="form-group">
+                <label>Nova Senha</label>
+                <input type="password" name="new_password" required autocomplete="new-password">
+            </div>
+
+            <button type="submit" class="btn btn-info">Solicitar Cadastro</button>
+        </form>
+    </div>
+
+    <script>
+        function switchTab(tabName) {
+            const tabs = document.querySelectorAll('.tab');
+            const loginForm = document.getElementById('loginForm');
+            const registerForm = document.getElementById('registerForm');
+
+            if (tabName === 'login') {
+                tabs[0].classList.add('active');
+                tabs[1].classList.remove('active');
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+            } else {
+                tabs[1].classList.add('active');
+                tabs[0].classList.remove('active');
+                registerForm.classList.remove('hidden');
+                loginForm.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

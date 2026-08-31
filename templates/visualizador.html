@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Agenda</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #0d141c; color: #c0caf5; height: 100vh; overflow: hidden; display: flex; flex-direction: column; padding: 15px; }
+
+        .top-bar { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 12px; background: #131b26; padding: 10px 16px; border: 1px solid #1e293b; border-radius: 6px; }
+        .top-bar h2 { font-size: 18px; color: #f8fafc; font-weight: 700; text-transform: capitalize; }
+
+        .btn { background: #1a2332; border: 1px solid #243044; color: #c0caf5; padding: 8px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; }
+        .btn:hover { background: #243044; }
+
+        .flex-row { display: flex; gap: 8px; align-items: center; }
+
+        .stats-bar { display: flex; gap: 15px; margin-bottom: 12px; justify-content: center; }
+        .stat-card { background: #131b26; border: 1px solid #1e293b; padding: 8px 24px; border-radius: 6px; font-weight: bold; font-size: 14px; text-align: center; display: flex; flex-direction: column; align-items: center; }
+        .stat-card span { font-size: 18px; font-weight: 800; margin-top: 2px; }
+
+        .table-container { flex: 1; overflow: auto; border: 1px solid #1e293b; border-radius: 6px; background: #0b1017; }
+        .grid-table { width: 100%; border-collapse: separate; border-spacing: 2px; background: #0b1017; }
+        
+        .grid-table th, .grid-table td { padding: 6px 4px; text-align: center; font-size: 11px; min-width: 110px; font-weight: 700; }
+        
+        .grid-table th { background: #131b26; color: #f8fafc; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #1e293b; font-size: 11px; text-transform: uppercase; }
+        .grid-table th:first-child, .grid-table td:first-child { min-width: 80px; max-width: 80px; position: sticky; left: 0; background: #131b26; z-index: 11; color: #94a3b8; border-right: 2px solid #1e293b; }
+        .grid-table th:first-child { z-index: 12; }
+
+        .cell-slot { height: 38px; word-break: break-word; border-radius: 3px; font-size: 11px; display: table-cell; vertical-align: middle; cursor: default; }
+        .cell-vago { color: #34d399; background-color: #064e3b; border: 1px solid #047857; }
+        .cell-ocupado { color: #fca5a5; background-color: #5c1d24; border: 1px solid #881337; }
+        .cell-encaixe { color: #fcd34d; background-color: #78350f; border: 1px solid #b45309; }
+
+        .aviso-overlay { display: none; position: fixed; inset: 0; background: rgba(3, 7, 12, 0.75); backdrop-filter: blur(2px); z-index: 1000; align-items: center; justify-content: center; }
+        .aviso-overlay.ativo { display: flex; }
+        .aviso-modal { background: #0d141c; border: 2px solid #ef4444; border-radius: 12px; padding: 40px 48px; text-align: center; max-width: 90%; min-width: 380px; box-shadow: 0 0 40px rgba(239, 68, 68, 0.6), 0 0 80px rgba(239, 68, 68, 0.25); animation: modalPop 0.25s ease-out, pulseBorda 2s ease-in-out infinite; }
+        .aviso-modal .aviso-icon { font-size: 52px; margin-bottom: 16px; }
+        .aviso-modal .aviso-titulo { color: #ef4444; font-size: 26px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 20px; }
+        .aviso-modal .aviso-msg { color: #f8fafc; font-size: 22px; font-weight: 700; margin-bottom: 28px; word-break: break-word; }
+        .aviso-modal .aviso-contador { display: inline-block; background: #1a1015; border: 1px solid #ef4444; color: #fca5a5; padding: 8px 20px; border-radius: 999px; font-size: 13px; font-weight: 600; margin-bottom: 18px; }
+        .aviso-modal .btn-fechar { display: block; margin: 0 auto; background: #1a2332; border: 1px solid #243044; color: #f8fafc; padding: 10px 22px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; }
+        .aviso-modal .btn-fechar:hover { background: #243044; }
+        @keyframes modalPop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes pulseBorda { 0%, 100% { box-shadow: 0 0 40px rgba(239, 68, 68, 0.6), 0 0 80px rgba(239, 68, 68, 0.25); } 50% { box-shadow: 0 0 55px rgba(239, 68, 68, 0.9), 0 0 100px rgba(239, 68, 68, 0.4); } }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <div class="flex-row">
+            <button class="btn" onclick="mudarDia(-1)">◀ Anterior</button>
+            <button class="btn" onclick="irParaHoje()">Hoje</button>
+            <button class="btn" onclick="mudarDia(1)">Próximo ▶</button>
+        </div>
+
+        <h2 id="currentDateDisplay"></h2>
+
+        <div class="flex-row">
+            <span style="font-size: 12px; color: #565f89; font-weight: 600;">Modo Apenas Leitura</span>
+        </div>
+    </div>
+
+    <div class="aviso-overlay" id="avisoOverlay">
+        <div class="aviso-modal">
+            <div class="aviso-icon">⚠️</div>
+            <div class="aviso-titulo">Aviso Importante</div>
+            <div class="aviso-msg" id="avisoTexto"></div>
+            <div class="aviso-contador" id="avisoContador">Fechando em 15 segundos...</div>
+            <button class="btn-fechar" onclick="fecharAviso()">Fechar Agora</button>
+        </div>
+    </div>
+
+    <div class="stats-bar">
+        <div class="stat-card" style="color: #34d399;">Vagos: <span id="cntVagos">0</span></div>
+        <div class="stat-card" style="color: #fca5a5;">Ocupados: <span id="cntOcupados">0</span></div>
+        <div class="stat-card" style="color: #fcd34d;">Encaixes: <span id="cntEncaixes">0</span></div>
+    </div>
+
+    <div class="table-container">
+        <table class="grid-table">
+            <thead>
+                <tr id="tableHeader">
+                    <th>Hora</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const HORARIOS = ["07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
+        
+        let tecnicos = [];
+        let agendaAtual = {};
+        let dataAtual = "{{ data_inicial }}";
+
+        window.onload = async () => {
+            await atualizarDados();
+            setInterval(atualizarDados, 3000);
+        };
+
+        async function atualizarDados() {
+            atualizarDataDisplay();
+            
+            try {
+                // Força requisição sem cache do navegador
+                const resTec = await fetch('/api/tecnicos', { cache: 'no-store' });
+                if (resTec.ok) {
+                    const dadosTec = await resTec.json();
+                    // Garante a conversão para lista de nomes caso a API retorne objetos [{nome: ...}]
+                    tecnicos = dadosTec.map(t => typeof t === 'object' && t !== null ? (t.nome || t.name) : t);
+                }
+
+                const resAgenda = await fetch(`/api/agenda?data=${dataAtual}`, { cache: 'no-store' });
+                if (resAgenda.ok) {
+                    agendaAtual = await resAgenda.json();
+                }
+
+                const resAviso = await fetch('/api/aviso', { cache: 'no-store' });
+                if (resAviso.ok) {
+                    const dadosAviso = await resAviso.json();
+                    // A API retorna uma lista; exibe o aviso mais recente.
+                    const aviso = Array.isArray(dadosAviso)
+                        ? (dadosAviso.length ? dadosAviso[dadosAviso.length - 1] : null)
+                        : dadosAviso;
+                    atualizarAviso(aviso);
+                }
+            } catch (e) {
+                console.error("Erro na busca de dados:", e);
+            }
+
+            renderizarGrid();
+        }
+
+        const DURACAO_AVISO = 15; // segundos
+        let avisoAtivoId = null;
+        let avisoFechadoId = null;
+        let contadorInterval = null;
+
+        function atualizarAviso(aviso) {
+            if (aviso && aviso.mensagem) {
+                // Identificador único do aviso (usa timestamp da API, ou a própria mensagem como fallback)
+                const id = aviso.criado_em || aviso.mensagem;
+
+                // Já foi fechado manualmente ou expirou? Não reabre.
+                if (id === avisoFechadoId || id === avisoAtivoId) return;
+
+                mostrarAviso(aviso.mensagem, id);
+            } else {
+                // Aviso removido pelo admin: fecha o modal e reseta o controle
+                if (avisoAtivoId !== null) fecharAviso();
+                avisoFechadoId = null;
+            }
+        }
+
+        function mostrarAviso(mensagem, id) {
+            avisoAtivoId = id;
+            document.getElementById('avisoTexto').innerText = mensagem;
+            document.getElementById('avisoOverlay').classList.add('ativo');
+
+            let restante = DURACAO_AVISO;
+            const contadorEl = document.getElementById('avisoContador');
+            contadorEl.innerText = `Fechando em ${restante} segundos...`;
+
+            clearInterval(contadorInterval);
+            contadorInterval = setInterval(() => {
+                restante--;
+                if (restante <= 0) {
+                    fecharAviso();
+                } else {
+                    contadorEl.innerText = `Fechando em ${restante} segundos...`;
+                }
+            }, 1000);
+        }
+
+        function fecharAviso() {
+            clearInterval(contadorInterval);
+            document.getElementById('avisoOverlay').classList.remove('ativo');
+            // Marca este aviso como já visto para não reaparecer no próximo polling
+            avisoFechadoId = avisoAtivoId;
+            avisoAtivoId = null;
+        }
+
+        function renderizarGrid() {
+            const header = document.getElementById('tableHeader');
+            const body = document.getElementById('tableBody');
+
+            if (!tecnicos || tecnicos.length === 0) {
+                header.innerHTML = '<th>Hora</th><th>Nenhum técnico cadastrado</th>';
+                body.innerHTML = '';
+                return;
+            }
+
+            header.innerHTML = '<th>Hora</th>' + tecnicos.map(t => `<th>${t}</th>`).join('');
+
+            body.innerHTML = HORARIOS.map(hora => {
+                const colunas = tecnicos.map(tec => {
+                    const chave = `${hora}-${tec}`;
+                    const slot = agendaAtual[chave] || { status: 'VAGO', info: '' };
+                    const classe = { 'VAGO': 'cell-vago', 'OCUPADO': 'cell-ocupado', 'ENCAIXE': 'cell-encaixe' }[slot.status] || 'cell-vago';
+                    const texto = slot.info ? slot.info : `■ ${slot.status}`;
+
+                    return `<td class="cell-slot ${classe}">${texto}</td>`;
+                }).join('');
+                return `<tr><td><strong>${hora}</strong></td>${colunas}</tr>`;
+            }).join('');
+
+            atualizarContadores();
+        }
+
+        function formatarDataISO(date) {
+            const ano = date.getFullYear();
+            const mes = String(date.getMonth() + 1).padStart(2, '0');
+            const dia = String(date.getDate()).padStart(2, '0');
+            return `${ano}-${mes}-${dia}`;
+        }
+
+        function atualizarDataDisplay() {
+            if (!dataAtual) return;
+            const partes = dataAtual.split('-');
+            const dt = new Date(partes[0], partes[1] - 1, partes[2]);
+            document.getElementById('currentDateDisplay').innerText = dt.toLocaleDateString('pt-BR', {
+                weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit'
+            });
+        }
+
+        function mudarDia(dias) {
+            const partes = dataAtual.split('-');
+            const dt = new Date(partes[0], partes[1] - 1, parseInt(partes[2]) + dias);
+            dataAtual = formatarDataISO(dt);
+            atualizarDados();
+        }
+
+        function irParaHoje() {
+            dataAtual = formatarDataISO(new Date());
+            atualizarDados();
+        }
+
+        function atualizarContadores() {
+            let vagos = 0, ocupados = 0, encaixes = 0;
+
+            HORARIOS.forEach(hora => {
+                tecnicos.forEach(tec => {
+                    const slot = agendaAtual[`${hora}-${tec}`];
+                    const s = slot ? slot.status : 'VAGO';
+                    if (s === 'OCUPADO') ocupados++;
+                    else if (s === 'ENCAIXE') encaixes++;
+                    else vagos++;
+                });
+            });
+
+            document.getElementById('cntVagos').innerText = vagos;
+            document.getElementById('cntOcupados').innerText = ocupados;
+            document.getElementById('cntEncaixes').innerText = encaixes;
+        }
+    </script>
+</body>
+</html>
