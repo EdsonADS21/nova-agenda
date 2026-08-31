@@ -3,6 +3,7 @@ from datetime import date, datetime
 
 import psycopg
 from psycopg.rows import dict_row
+from werkzeug.security import check_password_hash, generate_password_hash
 from flask import (
     Flask,
     jsonify,
@@ -21,8 +22,30 @@ app = Flask(__name__, template_folder=template_dir)
 # Em produção, nunca use uma chave fixa no código-fonte.
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'chave_secreta-agenda-local')
 
-# Usuários padrão (ativo=True libera o acesso)
-USUARIOS = {'admin': {'senha': 'admin123', 'role': 'admin', 'ativo': True}}
+# Cache somente para compatibilidade; a fonte oficial é o Neon.
+USUARIOS = {}
+
+
+def carregar_usuarios():
+  with get_conn() as conn:
+    with conn.cursor() as cur:
+      cur.execute('SELECT username, senha, role, ativo FROM usuarios ORDER BY username')
+      return {
+          row['username']: {'senha': row['senha'], 'role': row['role'], 'ativo': row['ativo']}
+          for row in cur.fetchall()
+      }
+
+
+def garantir_admin():
+  with get_conn() as conn:
+    with conn.cursor() as cur:
+      cur.execute('SELECT 1 FROM usuarios WHERE username = %s', ('admin',))
+      if cur.fetchone() is None:
+        cur.execute(
+            'INSERT INTO usuarios (username, senha, role, ativo) VALUES (%s, %s, %s, %s)',
+            ('admin', generate_password_hash('admin123'), 'admin', True),
+        )
+        conn.commit()
 
 # String de conexão com o banco Neon (injetada pela integração)
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -54,7 +77,14 @@ def init_db():
           'mensagem TEXT NOT NULL, '
           'criado_em TIMESTAMPTZ DEFAULT now())'
       )
+      cur.execute(
+          'CREATE TABLE IF NOT EXISTS usuarios ('
+          'id SERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL, '
+          'senha TEXT NOT NULL, role TEXT NOT NULL DEFAULT \'user\', '
+          'ativo BOOLEAN NOT NULL DEFAULT false, criado_em TIMESTAMPTZ DEFAULT now())'
+      )
       conn.commit()
+  garantir_admin()
 
 
 def listar_tecnicos():
@@ -161,12 +191,15 @@ def login_page():
       usuario = request.form.get('username', '').strip()
       senha = request.form.get('password', '').strip()
 
-      if usuario in USUARIOS and USUARIOS[usuario]['senha'] == senha:
-        if not USUARIOS[usuario]['ativo']:
+      usuarios = carregar_usuarios()
+      user = usuarios.get(usuario)
+      senha_valida = user and (check_password_hash(user['senha'], senha) or user['senha'] == senha)
+      if senha_valida:
+        if not user['ativo']:
           erro = 'Sua conta ainda não foi liberada pelo Administrador.'
         else:
           session['usuario'] = usuario
-          session['role'] = USUARIOS[usuario]['role']
+          session['role'] = user['role']
           return redirect(url_for('index_page'))
       else:
         erro = 'Usuário ou senha incorretos!'
@@ -178,17 +211,21 @@ def login_page():
 
       if not novo_usuario or not nova_senha:
         erro = 'Preencha todos os campos.'
-      elif novo_usuario in USUARIOS:
-        erro = 'Este nome de usuário já existe!'
       else:
-        USUARIOS[novo_usuario] = {
-            'senha': nova_senha,
-            'role': 'user',
-            'ativo': False,
-        }
-        sucesso = (
-            'Cadastro realizado! Aguarde o Administrador liberar seu acesso.'
-        )
+        with get_conn() as conn:
+          with conn.cursor() as cur:
+            cur.execute('SELECT 1 FROM usuarios WHERE username = %s', (novo_usuario,))
+            if cur.fetchone():
+              erro = 'Este nome de usuário já existe!'
+            else:
+              cur.execute(
+                  'INSERT INTO usuarios (username, senha, role, ativo) VALUES (%s, %s, %s, %s)',
+                  (novo_usuario, generate_password_hash(nova_senha), 'user', False),
+              )
+              conn.commit()
+              sucesso = (
+                  'Cadastro realizado! Aguarde o Administrador liberar seu acesso.'
+              )
 
   return render_template('login.html', erro=erro, sucesso=sucesso)
 
@@ -225,7 +262,7 @@ def admin_page():
         403,
     )
 
-  return render_template('admin.html', usuarios=USUARIOS)
+  return render_template('admin.html', usuarios=carregar_usuarios())
 
 
 @app.route('/visualizador')
@@ -244,11 +281,17 @@ def toggle_status():
 
   payload = request.get_json(silent=True) or {}
   usuario_alvo = (payload.get('usuario') or '').strip()
-  if usuario_alvo in USUARIOS and usuario_alvo != 'admin':
-    USUARIOS[usuario_alvo]['ativo'] = not USUARIOS[usuario_alvo]['ativo']
-    return jsonify(
-        {'success': True, 'novo_status': USUARIOS[usuario_alvo]['ativo']}
-    )
+  if usuario_alvo and usuario_alvo != 'admin':
+    with get_conn() as conn:
+      with conn.cursor() as cur:
+        cur.execute(
+            'UPDATE usuarios SET ativo = NOT ativo WHERE username = %s RETURNING ativo',
+            (usuario_alvo,),
+        )
+        atualizado = cur.fetchone()
+        conn.commit()
+    if atualizado:
+      return jsonify({'success': True, 'novo_status': atualizado['ativo']})
 
   return jsonify({'error': 'Ação inválida'}), 400
 
